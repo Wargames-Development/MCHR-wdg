@@ -5,3 +5,6 @@ build
 eclipse
 .classpath
 .project
+*.iml
+*.ipr
+*.iws

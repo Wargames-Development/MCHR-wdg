@@ -1,6 +1,7 @@
 package mcheli;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -22,6 +23,7 @@ import mcheli.wrapper.W_Block;
 import mcheli.wrapper.W_ChunkPosition;
 import mcheli.wrapper.W_Entity;
 import mcheli.wrapper.W_WorldFunc;
+import cpw.mods.fml.common.Loader;
 import net.minecraft.block.Block;
 import net.minecraft.client.Minecraft;
 import net.minecraft.enchantment.EnchantmentProtection;
@@ -39,12 +41,47 @@ import net.minecraft.world.ChunkPosition;
 import net.minecraft.world.Explosion;
 import net.minecraft.world.World;
 
+
 public class MCH_Explosion extends Explosion {
 
    //todo make it so that explosions don't just ignore safezones or claims
    //todo make it so explosions aren't as powerful and do not ignore blocks; specifically proximityfusedist/proximity weaponry
    //todo also make it so that explosions are not as powerful and correspond to the actual damagefactor they were assigned
    //todo make it so explosions are recognized by xenofactions
+
+   // ---- yRadar (hfr) hook cache ----
+   private static volatile boolean HFR_RESOLVED = false;
+   private static volatile boolean HFR_PRESENT = false;
+   private static volatile Method HFR_ALLOW_MCHELI_BLOCK_DAMAGE = null;
+
+   /** Returns true if block damage should be SKIPPED at (x,y,z). */
+   private static boolean shouldSkipBlockDamageForYRadar(net.minecraft.world.World world, double x, double y, double z) {
+      if (world == null || world.isRemote) return false;
+
+      if (!HFR_RESOLVED) {
+         HFR_PRESENT = Loader.isModLoaded("hfr");
+         if (HFR_PRESENT) {
+            try {
+               Class<?> ce = Class.forName("com.hfr.clowder.ClowderEvents");
+               HFR_ALLOW_MCHELI_BLOCK_DAMAGE =
+                       ce.getMethod("shouldAllowMCHeliBlockDamage",
+                               net.minecraft.world.World.class, double.class, double.class, double.class);
+            } catch (Throwable t) {
+               HFR_ALLOW_MCHELI_BLOCK_DAMAGE = null;
+            }
+         }
+         HFR_RESOLVED = true;
+      }
+
+      if (!HFR_PRESENT || HFR_ALLOW_MCHELI_BLOCK_DAMAGE == null) return false;
+
+      try {
+         Object allow = HFR_ALLOW_MCHELI_BLOCK_DAMAGE.invoke(null, world, x, y, z);
+         if (allow instanceof Boolean) return !((Boolean)allow); // FALSE => skip edits
+      } catch (Throwable t) { /* fail-open */ }
+      return false;
+   }
+
 
    public final int field_77289_h = 16;
    public World world;
@@ -96,16 +133,34 @@ public class MCH_Explosion extends Explosion {
       HashSet hashset = new HashSet();
       int i = 0;
 
-      while(true) {
+      // NEW: early safezone check (server only)
+      final boolean skipBlocks =
+              (!this.world.isRemote) &&
+                      shouldSkipBlockDamageForYRadar(this.world, super.explosionX, super.explosionY, super.explosionZ);
+
+      if (skipBlocks) {
+         // Jump straight to the entity-damage section; skip the block-raycast loops
+         i = 16;
+      }
+
+      while (true) {
          this.getClass();
          int j;
          int k;
          double d0;
          double d1;
          double d2;
-         if(i >= 16) {
+
+         if (i >= 16) {
             float var33 = super.explosionSize;
-            super.affectedBlockPositions.addAll(hashset);
+
+            // CHANGED: only add raycasted blocks if we didn't skip them
+            if (!skipBlocks) {
+               super.affectedBlockPositions.addAll(hashset);
+            } else {
+               super.affectedBlockPositions.clear(); // be explicit
+            }
+
             super.explosionSize *= 2.0F;
             i = MathHelper.floor_double(super.explosionX - (double)super.explosionSize - 1.0D);
             j = MathHelper.floor_double(super.explosionX + (double)super.explosionSize + 1.0D);
@@ -113,7 +168,11 @@ public class MCH_Explosion extends Explosion {
             int l1 = MathHelper.floor_double(super.explosionY + (double)super.explosionSize + 1.0D);
             int var34 = MathHelper.floor_double(super.explosionZ - (double)super.explosionSize - 1.0D);
             int j2 = MathHelper.floor_double(super.explosionZ + (double)super.explosionSize + 1.0D);
-            List var35 = this.world.getEntitiesWithinAABBExcludingEntity(super.exploder, W_AxisAlignedBB.getAABB((double)i, (double)k, (double)var34, (double)j, (double)l1, (double)j2));
+
+            List var35 = this.world.getEntitiesWithinAABBExcludingEntity(
+                    super.exploder,
+                    W_AxisAlignedBB.getAABB((double)i, (double)k, (double)var34, (double)j, (double)l1, (double)j2)
+            );
             Vec3 vec3 = W_WorldFunc.getWorldVec3(this.world, super.explosionX, super.explosionY, super.explosionZ);
             super.exploder = this.explodedPlayer;
 
@@ -324,6 +383,15 @@ public class MCH_Explosion extends Explosion {
    public void doExplosionB(boolean par1) {
       if(this.isPlaySound) {
          W_WorldFunc.DEF_playSoundEffect(this.world, super.explosionX, super.explosionY, super.explosionZ, "random.explode", 4.0F, (1.0F + (this.world.rand.nextFloat() - this.world.rand.nextFloat()) * 0.2F) * 0.7F);
+      }
+
+      // yRadar (hfr) safezone gate
+      if (!this.world.isRemote && shouldSkipBlockDamageForYRadar(this.world, super.explosionX, super.explosionY, super.explosionZ)) {
+         this.isDestroyBlock = false;
+         super.isSmoking = false;
+         super.isFlaming = false;
+         super.affectedBlockPositions.clear();
+         // Continue; the subsequent loops become no-ops. Entities/FX unaffected.
       }
 
       MCH_Config var10000;
