@@ -381,17 +381,56 @@ public class MCH_Explosion extends Explosion {
    }
 
    public void doExplosionB(boolean par1) {
-      if(this.isPlaySound) {
-         W_WorldFunc.DEF_playSoundEffect(this.world, super.explosionX, super.explosionY, super.explosionZ, "random.explode", 4.0F, (1.0F + (this.world.rand.nextFloat() - this.world.rand.nextFloat()) * 0.2F) * 0.7F);
+      if (this.isPlaySound) {
+         W_WorldFunc.DEF_playSoundEffect(
+                 this.world,
+                 super.explosionX, super.explosionY, super.explosionZ,
+                 "random.explode",
+                 4.0F,
+                 (1.0F + (this.world.rand.nextFloat() - this.world.rand.nextFloat()) * 0.2F) * 0.7F
+         );
       }
 
-      // yRadar (hfr) safezone gate
+      // Stage 1: center-based veto (fast path)
       if (!this.world.isRemote && shouldSkipBlockDamageForYRadar(this.world, super.explosionX, super.explosionY, super.explosionZ)) {
          this.isDestroyBlock = false;
          super.isSmoking = false;
          super.isFlaming = false;
          super.affectedBlockPositions.clear();
-         // Continue; the subsequent loops become no-ops. Entities/FX unaffected.
+         // Continue; loops will no-op. Entities/FX unaffected.
+      }
+
+      // Stage 2: border safety net — if ANY affected block lies in protected territory, cancel edits.
+      // Only run if we didn't already skip and yRadar hook is available.
+      if (!this.world.isRemote && this.isDestroyBlock && (super.isSmoking || super.isFlaming) && HFR_PRESENT && HFR_ALLOW_MCHELI_BLOCK_DAMAGE != null) {
+         boolean hitProtected = false;
+         try {
+            for (Object obj : super.affectedBlockPositions) {
+               ChunkPosition p = (ChunkPosition) obj;
+               Object allow = HFR_ALLOW_MCHELI_BLOCK_DAMAGE.invoke(
+                       null,
+                       this.world,
+                       (double)W_ChunkPosition.getChunkPosX(p) + 0.5D,
+                       (double)W_ChunkPosition.getChunkPosY(p) + 0.5D,
+                       (double)W_ChunkPosition.getChunkPosZ(p) + 0.5D
+               );
+               if (allow instanceof Boolean && !((Boolean) allow)) {
+                  hitProtected = true;
+                  break; // early exit
+               }
+            }
+         } catch (Throwable t) {
+            // fail-open: if reflection misbehaves, don't block here
+            hitProtected = false;
+         }
+
+         if (hitProtected) {
+            this.isDestroyBlock = false;
+            super.isSmoking = false;
+            super.isFlaming = false;
+            super.affectedBlockPositions.clear();
+            // Continue; loops below become no-ops
+         }
       }
 
       MCH_Config var10000;
@@ -402,49 +441,55 @@ public class MCH_Explosion extends Explosion {
       int k;
       int l;
       Block b;
-      if(super.isSmoking) {
+
+      if (super.isSmoking) {
          iterator = super.affectedBlockPositions.iterator();
 
-         while(iterator.hasNext()) {
-            chunkposition = (ChunkPosition)iterator.next();
+         while (iterator.hasNext()) {
+            chunkposition = (ChunkPosition) iterator.next();
             i = W_ChunkPosition.getChunkPosX(chunkposition);
             j = W_ChunkPosition.getChunkPosY(chunkposition);
             k = W_ChunkPosition.getChunkPosZ(chunkposition);
             l = W_WorldFunc.getBlockId(this.world, i, j, k);
-            if(l > 0 && this.isDestroyBlock && this.explosionSizeBlock > 0.0F) {
-               var10000 = MCH_MOD.config;
-               if(MCH_Config.Explosion_DestroyBlock.prmBool) {
-                  b = W_Block.getBlockById(l);
-                  if(b.canDropFromExplosion(this)) {
-                     b.dropBlockAsItemWithChance(this.world, i, j, k, this.world.getBlockMetadata(i, j, k), 1.0F / this.explosionSizeBlock, 0);
-                  }
 
+            if (l > 0 && this.isDestroyBlock && this.explosionSizeBlock > 0.0F) {
+               var10000 = MCH_MOD.config;
+               if (MCH_Config.Explosion_DestroyBlock.prmBool) {
+                  b = W_Block.getBlockById(l);
+                  if (b.canDropFromExplosion(this)) {
+                     b.dropBlockAsItemWithChance(
+                             this.world, i, j, k,
+                             this.world.getBlockMetadata(i, j, k),
+                             1.0F / this.explosionSizeBlock, 0
+                     );
+                  }
                   b.onBlockExploded(this.world, i, j, k, this);
                }
             }
          }
       }
 
-      if(super.isFlaming) {
+      if (super.isFlaming) {
          var10000 = MCH_MOD.config;
-         if(MCH_Config.Explosion_FlamingBlock.prmBool) {
+         if (MCH_Config.Explosion_FlamingBlock.prmBool) {
             iterator = super.affectedBlockPositions.iterator();
 
-            while(iterator.hasNext()) {
-               chunkposition = (ChunkPosition)iterator.next();
+            while (iterator.hasNext()) {
+               chunkposition = (ChunkPosition) iterator.next();
                i = W_ChunkPosition.getChunkPosX(chunkposition);
                j = W_ChunkPosition.getChunkPosY(chunkposition);
                k = W_ChunkPosition.getChunkPosZ(chunkposition);
                l = W_WorldFunc.getBlockId(this.world, i, j, k);
                b = W_WorldFunc.getBlock(this.world, i, j - 1, k);
-               if(l == 0 && b != null && b.isOpaqueCube() && explosionRNG.nextInt(3) == 0) {
+
+               if (l == 0 && b != null && b.isOpaqueCube() && explosionRNG.nextInt(3) == 0) {
                   W_WorldFunc.setBlock(this.world, i, j, k, Blocks.fire);
                }
             }
          }
       }
-
    }
+
 
    public MCH_Explosion.ExplosionResult newExplosionResult() {
       return new MCH_Explosion.ExplosionResult();
