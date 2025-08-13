@@ -673,7 +673,7 @@ public abstract class MCH_EntityBaseBullet extends W_Entity implements MCH_IChun
             }
         }
 
-        
+
 
         if(!worldObj.isRemote) {
             if (shootingAircraft instanceof MCH_EntityAircraft && !speedAddedFromAircraft && getInfo().speedDependsAircraft) {
@@ -690,9 +690,9 @@ public abstract class MCH_EntityBaseBullet extends W_Entity implements MCH_IChun
 
 
         //if (!isInRangeToRenderDist2) {
-            if (!bomblet && gravitydown && bigdelay && initialized) {
-                checkAndLoadChunks();  // If this method handles any critical chunk loading, it stays here
-            }
+        if (!bomblet && gravitydown && this.getInfo() != null && this.getInfo().chunkloads && initialized) {
+            checkAndLoadChunks();  // If this method handles any critical chunk loading, it stays here
+        }
         //}
 
         if (super.worldObj.isRemote && this.countOnUpdate == 0) {
@@ -820,7 +820,7 @@ public abstract class MCH_EntityBaseBullet extends W_Entity implements MCH_IChun
             // Check if the bullet still exists before proceeding
             if (!super.isDead) {
                 // Ensure the bullet has the specific conditions (e.g., no bomblet, gravityDown, and bigDelay)
-                if (!bomblet && gravitydown && bigdelay && initialized) {
+                if (!bomblet && gravitydown && this.getInfo() != null && this.getInfo().chunkloads && initialized) {
 
                     // Load the necessary chunks in front of the bullet
                     loadChunksInBulletPath(chunkX, chunkZ, this.motionX, this.motionZ);

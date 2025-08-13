@@ -19,6 +19,7 @@ import java.util.Random;
 
 public class MCH_WeaponInfo extends MCH_BaseInfo {
     public static Random rand = new Random();
+    public boolean chunkloads = false;
     public final String name;
     public String explosionType;
     public int nukeYield;
@@ -611,6 +612,8 @@ public class MCH_WeaponInfo extends MCH_BaseInfo {
                     this.bombletModelName = data.toLowerCase().trim();
                 } else if (item.compareTo("fae") == 0) {
                     this.isFAE = this.toBool(data);
+                } else if (item.equalsIgnoreCase("Chunkloads")) {
+                    this.chunkloads = this.toBool(data);
                 } else if (item.compareTo("guidedtorpedo") == 0) {
                     this.isGuidedTorpedo = this.toBool(data);
                 } else if (item.compareTo("destruct") == 0) {
