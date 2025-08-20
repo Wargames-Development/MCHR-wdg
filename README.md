@@ -7,7 +7,7 @@
 
 # MCHELI-R/O Wargames Edition SRC
 
-This repository is the source code behind [mcheli-O/R Wargames Edition](), a further fork of the [MCHELI-O](https://github.com/RagexPrince683/MCH-mocmaster) maintained by [RagexPrince683](https://github.com/RagexPrince683) which implements features from the [MCHELI-R](https://gitee.com/TV90/MCHeli-Reforged) develped by [TV90](https://gitee.com/TV90/) (MCHR develops on gitee therefore these are gitee links). This all builds ontop of the original [1.7.10 MCHELI](https://www.curseforge.com/minecraft/mc-mods/mcheli-minecraft-helicopter-mod) created by EMB4 which was decoded by MOC many years ago since EMB4 left the modding scene.
+This repository is the source code behind [mcheli-O/R Wargames Edition](https://github.com/Wargames-Development/MCHELI-R-O-WDG-Edition), a further fork of the [MCHELI-O](https://github.com/RagexPrince683/MCH-mocmaster) maintained by [RagexPrince683](https://github.com/RagexPrince683) which implements features from the [MCHELI-R](https://gitee.com/TV90/MCHeli-Reforged) develped by [TV90](https://gitee.com/TV90/) (MCHR develops on gitee therefore these are gitee links). This all builds ontop of the original [1.7.10 MCHELI](https://www.curseforge.com/minecraft/mc-mods/mcheli-minecraft-helicopter-mod) created by EMB4 which was decoded by MOC many years ago since EMB4 left the modding scene.
 
 Please checkout our [Credits Section](#meet-our-team--credits) for the full information.
 
