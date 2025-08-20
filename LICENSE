@@ -1,38 +1,35 @@
-MC Helicopter Overdrive
-Copyright (c) 2025 Ragex
+SPDX-License-Identifier: GPL-3.0-or-later
 
-This project is a standalone fork of the original MC Helicopter mod (c) EMB4, which has not been maintained since approximately 2017. 
+MC Helicopter — Wargames Development Group Fork (source code only)
+Copyright (c) 2025–present Wargames Development Group
+(organization head: Glac) and individual contributors.
 
-MC Helicopter Overdrive is an independent project, not affiliated with the original MC Helicopter project or its developers. All original content created by Ragex and contributors in this project is licensed under the GNU General Public License v3.0.
+Lineage & attribution (informational only; not additional terms):
+• Original “MC Helicopter” by EMB4 — All Rights Reserved (2014–2017).
+  Not included here except for clean-room reimplementations, fair use, or with explicit permission.
+• Mcheli-O / “MC Helicopter Overdrive” by RagexPrince683 and contributors — GPL-3.0-or-later.
+  This repository is a fork that periodically syncs with Mcheli-O and carries WDG changes.
+• MCHeli-Reforged (MCHeli-R) by TV90 and contributors — GPL-3.0.
+  Portions may be included per the GPL.
 
-The original MC Helicopter project by EMB4 remains All Rights Reserved and is not included here unless permitted under fair use, or recreated from scratch or under explicit or informal permission (as granted by Fureniku, current CurseForge maintainer).
+Scope:
+• This license applies to the **source code** in this repository (e.g., under /src).
+• Non-code assets (textures/models/sounds) are **out of scope** for this LICENSE unless a file explicitly says otherwise.
 
-For full license terms, see: https://www.gnu.org/licenses/gpl-3.0.html
+License of this repository’s source code:
+• GNU General Public License v3.0 **or later** (GPL-3.0-or-later).
+• No additional restrictions are intended; this preamble is purely informational and does not modify the GPL terms below.
 
----
+Contribution policy:
+• By submitting a change, you agree to license your contribution under GPL-3.0-or-later
+  and to be listed in the commit history and/or AUTHORS.
 
-This software is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
-
-MC Helicopter Overdrive - [McheliO] 
-Copyright (C) 2025  Ragex
-
-This program is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
+Upstream sync note:
+• WDG keeps this fork up to date with Mcheli-O while maintaining its own modifications,
+  which are © their respective authors under GPL-3.0-or-later.
 
 
-                      GNU GENERAL PUBLIC LICENSE
+                   GNU GENERAL PUBLIC LICENSE
                        Version 3, 29 June 2007
 
  Copyright (C) 2007 Free Software Foundation, Inc. <https://fsf.org/>
