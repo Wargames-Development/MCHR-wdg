@@ -26,6 +26,7 @@ Further changes are being made in the act of connection with our Wargames Editio
 
 - Added to the api section a new explosions manager to link with yRadar,
   - Updated the explosion manager to always pass through the gate to fully block any block damage when it shouldn't be allowed.
+- Update the chunkloading system so it can be activated or deactivated in the weapon file. Default is false & no param would default to false too. "chunkloads = true" would force chunkloading for the weapon.
 
 ### Coming Soon:
 
