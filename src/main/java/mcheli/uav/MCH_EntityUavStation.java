@@ -64,6 +64,11 @@ public class MCH_EntityUavStation
       private boolean continuePressed = false;
       public boolean isridingnewuav = false;
       public String newUavPlayerUUID;
+      public MCH_EntityAircraft assignedUav = null;
+
+      public int assignedUavId = -1; // fallback tracking
+      public String assignedUavUUID = "";
+
 
 
              public void setContinuePressed(boolean flag) {
@@ -204,6 +209,11 @@ public class MCH_EntityUavStation
               }
 
            nbt.setString("LastCtrlAc", s);
+
+          if (this.assignedUav != null && !this.assignedUav.isDead) {
+              nbt.setInteger("AssignedUavId", this.assignedUav.getEntityId());
+              nbt.setString("AssignedUavUUID", this.assignedUav.getUniqueID().toString());
+          }
          }
 
       protected void readEntityFromNBT(NBTTagCompound nbt) {
@@ -216,6 +226,12 @@ public class MCH_EntityUavStation
               }
 
            this.loadedLastControlAircraftGuid = nbt.getString("LastCtrlAc");
+          if (nbt.hasKey("AssignedUavId")) {
+              this.assignedUavId = nbt.getInteger("AssignedUavId");
+          }
+          if (nbt.hasKey("AssignedUavUUID")) {
+              this.assignedUavUUID = nbt.getString("AssignedUavUUID");
+          }
          }
 
 
@@ -231,110 +247,157 @@ public class MCH_EntityUavStation
 
              @Override
              public void setDead() {
-                    //if setdead is fired clientside = this is no longer chunk loaded, we should init a chunk loader
-                    //if setdead is fired serverside = this was actually attacked, get the linked player and force a dismount.
+                 if (this.worldObj.isRemote) {
+                     System.out.println("setDead fired in UAV Station (client)");
+                 } else {
+                     System.out.println("setDead fired in UAV Station (server)");
 
+                     // If this is a new UAV, we would handle dismount logic here
+                     // (currently commented out)
+        /*
+        if (this.riddenByEntity instanceof EntityPlayer && this.controlAircraft != null && this.controlAircraft.getAcInfo().isNewUAV) {
+            EntityPlayer player = (EntityPlayer)this.riddenByEntity;
+            if (player != null) {
+                System.out.println("Unmounting player: " + player.getDisplayName());
+                unmountEntity(true);
+                // player.mountEntity(null);
+                // player.setPositionAndUpdate(storedStationX, storedStationY, storedStationZ);
+            }
+        }
+        */
+                 }
 
-                 System.out.println("setDead fired in UAV Station");
-
-                 //station no longer loaded, OR broken NOT necessarily dead that's literally just fake
-                 //also kinda clientside-ish? might be both idk
-                 //so we should start chunk loading here?
-
-                 //will fire when player is outside of chunk for some reason
-
-                 //ive determined the thing I'm trying to do should be done in attackentity method.
+                 // Notes:
+                 // - setDead clientside: no longer chunk loaded, should init a chunk loader
+                 // - setDead serverside: entity attacked, force dismount linked player
+                 // - This isn’t strictly “dead” — just unloaded or broken
+                 // - Current conclusion: handle actual logic in attackEntityFrom()
 
                  super.setDead();
-                 System.out.println("UAV Station setDead completed.");
              }
 
 
+             @Override
              public boolean attackEntityFrom(DamageSource damageSource, float damage) {
-           if (isEntityInvulnerable())
-                return false;
-           if (this.isDead)
-               return true;
-          if (this.worldObj.isRemote) {
-                return true;
-              }
-           String dmt = damageSource.getDamageType();
-           MCH_Config var10000 = MCH_MOD.config;
-           damage = MCH_Config.applyDamageByExternal((Entity)this, damageSource, damage);
-           if (!MCH_Multiplay.canAttackEntity(damageSource, (Entity)this)) {
-                return false;
-              }
-           boolean isCreative = false;
-           Entity entity = damageSource.getEntity();
-           boolean isDamegeSourcePlayer = false;
-           if (entity instanceof EntityPlayer) {
-                isCreative = ((EntityPlayer)entity).capabilities.isCreativeMode;
-                if (dmt.compareTo("player") == 0) {
-                     isDamegeSourcePlayer = true;
-                   }
-
-                W_WorldFunc.MOD_playSoundAtEntity((Entity)this, "hit", 1.0F, 1.0F);
-              } else {
-                W_WorldFunc.MOD_playSoundAtEntity((Entity)this, "helidmg", 1.0F, 0.9F + this.rand.nextFloat() * 0.1F);
-              }
-
-           setBeenAttacked();
-           if (damage > 0.0F) {
-
-               EntityPlayer player = null;
-               // If there's a rider, capture the UUID immediately
-               if (this.riddenByEntity instanceof EntityPlayer) {
-                   player = (EntityPlayer)this.riddenByEntity;
-                   this.newUavPlayerUUID = player.getUniqueID().toString();
-               } else if (this.newUavPlayerUUID != null) {
-                   // Search for the player using the stored UUID
-                   for (Object obj : worldObj.playerEntities) {
-                       if (obj instanceof EntityPlayer) {
-                           EntityPlayer p = (EntityPlayer) obj;
-                           if (p.getUniqueID().toString().equals(this.newUavPlayerUUID)) {
-                               player = p;
-                               break;
-                           }
-                       }
-                   }
-
-                   if (player != null) {
-                       unmountEntity(true);
-                       // Force dismount
-                       //player.mountEntity(null);
-                       // Optional: add potion effects or chat messages as needed
-                       //player.setPositionAndUpdate(storedStationX, storedStationY, storedStationZ);
-                       System.out.println("Unmount in damage logic.");
-                   } else {
-                       System.out.println("No player found for teleportation in damage logic.");
-                   }
-               }
-
-               this.dropContentsWhenDead = true;
-               System.out.println(MCH_EntityUavStation.storedStationX + " " +
-                       MCH_EntityUavStation.storedStationY + " " +
-                       MCH_EntityUavStation.storedStationZ + " " + "station pos");
-
-                setDead();
-                if (!isDamegeSourcePlayer) {
-                    System.out.println("explosion created");
-                     MCH_Explosion.newExplosion(this.worldObj, (Entity)null, this.riddenByEntity, this.posX, this.posY, this.posZ, 1.0F, 0.0F, true, true, false, false, 0);
-                   }
-
-                if (!isCreative) {
-                     int kind = getKind();
-                     if (kind > 0) {
-                          dropItemWithOffset((Item)MCH_MOD.itemUavStation[kind - 1], 1, 0.0F);
-                        }
-                   }
-              }
-
-           return true;
-         }
+                 if (isEntityInvulnerable()) return false;
+                 if (this.isDead) return true;
+                 if (this.worldObj.isRemote) return true;
 
 
 
-      protected boolean canTriggerWalking() {
+                 // Apply external damage modifications
+                 String damageType = damageSource.getDamageType();
+                 damage = MCH_Config.applyDamageByExternal(this, damageSource, damage);
+
+                 // Disallow if not attackable
+                 if (!MCH_Multiplay.canAttackEntity(damageSource, this)) return false;
+
+                 // Attacker info
+                 Entity attacker = damageSource.getEntity();
+                 boolean isCreative = false;
+                 boolean isPlayerSource = false;
+
+                 if (attacker instanceof EntityPlayer) {
+                     EntityPlayer player = (EntityPlayer) attacker;
+                     isCreative = player.capabilities.isCreativeMode;
+                     if ("player".equals(damageType)) isPlayerSource = true;
+
+                     W_WorldFunc.MOD_playSoundAtEntity(this, "hit", 1.0F, 1.0F);
+                 } else {
+                     W_WorldFunc.MOD_playSoundAtEntity(this, "helidmg", 1.0F, 0.9F + this.rand.nextFloat() * 0.1F);
+                 }
+
+                 setBeenAttacked();
+
+                 if (damage > 0.0F) {
+                     EntityPlayer assignedPlayer = null;
+
+                     //kill UAV if station is fucked HOPEFULLY
+                     if (this.assignedUav != null && !this.assignedUav.isDead) {
+                         Entity rider = this.assignedUav.riddenByEntity;
+                         if (rider instanceof EntityPlayer) {
+                             EntityPlayer player = (EntityPlayer) rider;
+                             player.mountEntity(null); // force unmount
+                             player.setPositionAndUpdate(storedStationX, storedStationY, storedStationZ);
+                             System.out.println("Teleported " + player.getCommandSenderName() + " back to station.");
+                         }
+                         this.assignedUav.setDead();
+                         //todone?? now teleport the player to the station again because for some fucking reason
+                         // they dont get teleported back when the station is destroyed
+                         // I fucking hate this goddamn mod
+                         System.out.println("Killed assigned UAV: " + this.assignedUav.getEntityId());
+                     } else {
+                         System.out.println("No assigned UAV linked to this station.");
+                     }
+
+                     //WARNING: REDUNDANT BULLSHIT:
+
+                     // DOES NOT --- Resolve assigned player ---
+                     if (this.riddenByEntity instanceof EntityPlayer) {
+                         assignedPlayer = (EntityPlayer) this.riddenByEntity;
+                         this.newUavPlayerUUID = assignedPlayer.getUniqueID().toString();
+                     } else if (this.newUavPlayerUUID != null) {
+                         for (Object obj : worldObj.playerEntities) {
+                             if (obj instanceof EntityPlayer) {
+                                 EntityPlayer p = (EntityPlayer) obj;
+                                 if (p.getUniqueID().toString().equals(this.newUavPlayerUUID)) {
+                                     assignedPlayer = p;
+                                     break;
+                                 }
+                             }
+                         }
+                     }
+
+                     // DOES NOT --- Kill the UAV the assigned player is riding ---
+                     if (assignedPlayer != null && assignedPlayer.ridingEntity instanceof MCH_EntityAircraft) {
+                         MCH_EntityAircraft uav = (MCH_EntityAircraft) assignedPlayer.ridingEntity;
+                         uav.setDead(); // will automatically dismount player
+                         System.out.println("Killed UAV for player: " + assignedPlayer.getCommandSenderName());
+                     } else {
+                         System.out.println("No UAV found to kill for assigned player.");
+                     }
+
+                     //WARNING: END OF REDUNDANT BULLSHIT
+
+                     // Handle station death
+                     this.dropContentsWhenDead = true;
+
+                     System.out.println(
+                             MCH_EntityUavStation.storedStationX + " " +
+                                     MCH_EntityUavStation.storedStationY + " " +
+                                     MCH_EntityUavStation.storedStationZ + " station pos"
+                     );
+
+                     setDead();
+
+                     // Explosion if not caused by player
+                     if (!isPlayerSource) {
+                         System.out.println("explosion created");
+                         MCH_Explosion.newExplosion(
+                                 this.worldObj, null, this.riddenByEntity,
+                                 this.posX, this.posY, this.posZ,
+                                 1.0F, 0.0F,
+                                 true, true, false, false, 0
+                         );
+                     }
+
+                     // Drop station item if not creative
+                     if (!isCreative) {
+                         int kind = getKind();
+                         if (kind > 0) {
+                             dropItemWithOffset(MCH_MOD.itemUavStation[kind - 1], 1, 0.0F);
+                         }
+                     }
+                 }
+
+                 return true;
+             }
+
+
+
+
+
+             protected boolean canTriggerWalking() {
            return false;
          }
 
@@ -388,6 +451,28 @@ public class MCH_EntityUavStation
 
       public void onUpdate() {
 
+          //I don't know if this should go in the EntityAircraft class or this class's onupdate method
+          // but fuck you here you go!
+          if (this.assignedUav == null && this.assignedUavId > 0 && !this.worldObj.isRemote) {
+              Entity e = this.worldObj.getEntityByID(this.assignedUavId);
+              if (e instanceof MCH_EntityAircraft) {
+                  this.assignedUav = (MCH_EntityAircraft)e;
+                  System.out.println("Re-linked UAV by ID: " + this.assignedUav.getEntityId());
+              }
+              else if (!this.assignedUavUUID.isEmpty()) {
+                  for (Object obj : this.worldObj.loadedEntityList) {
+                      if (obj instanceof MCH_EntityAircraft) {
+                          MCH_EntityAircraft ac = (MCH_EntityAircraft)obj;
+                          if (ac.getUniqueID().toString().equals(this.assignedUavUUID)) {
+                              this.assignedUav = ac;
+                              System.out.println("Re-linked UAV by UUID: " + this.assignedUavUUID);
+                              break;
+                          }
+                      }
+                  }
+              }
+          }
+
           EntityPlayer player = (EntityPlayer)this.riddenByEntity;
            super.onUpdate();
            this.prevRotCover = this.rotCover;
@@ -412,6 +497,7 @@ public class MCH_EntityUavStation
                           " controlled by: " + ((EntityPlayer)this.riddenByEntity).getDisplayName());
                   isridingnewuav = true;
                   this.storeStationPosition();
+
               }
               //this is our first bugged state. do nothing here.
 
@@ -591,6 +677,7 @@ public class MCH_EntityUavStation
 
                      lastAc.setUavStation(this);
                      setControlAircract(lastAc);
+                     //this.assignedUav = uav;
 
                      if(this.riddenByEntity instanceof EntityPlayer) {
                          lastAc.storedRider = (EntityPlayer)this.riddenByEntity;
@@ -686,6 +773,7 @@ public class MCH_EntityUavStation
                              }
 
                           this.worldObj.spawnEntityInWorld((Entity)ac);
+                          this.assignedUav = (MCH_EntityAircraft) ac;
                           if (!((MCH_EntityAircraft)ac).isTargetDrone()) {
                                ((MCH_EntityAircraft)ac).setFuel((int)(((MCH_EntityAircraft)ac).getMaxFuel() * 0.05F));
                                W_EntityPlayer.closeScreen(user);
