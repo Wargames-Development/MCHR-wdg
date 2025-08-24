@@ -110,6 +110,7 @@ public abstract class MCH_AircraftInfo extends MCH_BaseInfo {
    public List<CameraPosition> cameraPosition;
    public float cameraRotationSpeed;
    public float speed;
+   public float torque;
    public float motionFactor;
    public float mobilityYaw;
    public float mobilityPitch;
@@ -318,6 +319,7 @@ public abstract class MCH_AircraftInfo extends MCH_BaseInfo {
       this.alwaysCameraView = false;
       this.cameraRotationSpeed = 1000.0F;
       this.speed = 0.1F;
+      this.torque = 0.0F;
       this.motionFactor = 0.96F;
       this.mobilityYaw = 1.0F;
       this.mobilityPitch = 1.0F;
@@ -507,6 +509,10 @@ public abstract class MCH_AircraftInfo extends MCH_BaseInfo {
 
    public float getMaxSpeed() {
       return 4.0F;
+   }
+   
+   public float getMaxTorque() {
+	  return 1000.0F;
    }
 
    public float getMinRotationPitch() {
@@ -810,6 +816,8 @@ public abstract class MCH_AircraftInfo extends MCH_BaseInfo {
                                     this.regeneration = this.toBool(data);
                                  } else if(item.compareTo("speed") == 0) {
                                     this.speed = this.toFloat(data, 0.0F, this.getMaxSpeed());
+                                 } else if(item.compareTo("torque") == 0) {
+                                     this.torque = this.toFloat(data, 0.0F, this.getMaxTorque());
                                  } else if(item.equalsIgnoreCase("EnableBack")) {
                                     this.enableBack = this.toBool(data);
                                  } else if(item.equalsIgnoreCase("MotionFactor")) {

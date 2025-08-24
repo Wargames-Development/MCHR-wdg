@@ -1,10 +1,14 @@
 package mcheli.chain;
 
 import java.util.List;
+
+import mcheli.aircraft.MCH_EntityAircraft;
 import mcheli.aircraft.MCH_EntityHitBox;
 import mcheli.aircraft.MCH_EntitySeat;
 import mcheli.chain.MCH_EntityChain;
+import mcheli.helicopter.MCH_EntityHeli;
 import mcheli.parachute.MCH_EntityParachute;
+import mcheli.plane.MCP_EntityPlane;
 import mcheli.uav.MCH_EntityUavStation;
 import mcheli.wrapper.W_Entity;
 import mcheli.wrapper.W_Item;
@@ -68,7 +72,15 @@ public class MCH_ItemChain extends W_Item {
             if(W_Entity.isEqual(entityTowed, entity)) {
                return;
             }
-
+            int towable = isTowable(entity,entityTowed);
+            if(towable == 0) {
+            	return;
+            }
+            else if (towable == -1) {
+            	int towedID = entityTowed.getEntityId();
+            	entityTowed = entity;
+            	entity = world.getEntityByID(towedID);
+            }
             double diff = (double)entity.getDistanceToEntity(entityTowed);
             if(diff < 2.0D || diff > 16.0D) {
                return;
@@ -153,4 +165,34 @@ public class MCH_ItemChain extends W_Item {
 
       return null;
    }
+   
+   public static int isTowable(Entity entity, Entity towedEntity) {
+	   float torqueent = 0.0f;
+	   float torquetow = 0.0f;
+	   if(entity instanceof MCH_EntityAircraft) {
+		   torqueent  = ((MCH_EntityAircraft) entity).getAcInfo().torque;
+		   if(entity instanceof MCP_EntityPlane) {
+			   return 0;
+		   }
+	   }
+	   if(towedEntity instanceof MCH_EntityAircraft) {
+		   torquetow  = ((MCH_EntityAircraft) towedEntity).getAcInfo().torque;
+		   if(towedEntity instanceof MCP_EntityPlane) {
+			   return 0;
+		   }
+	   }
+	   if(entity instanceof MCH_EntityHeli && towedEntity instanceof MCH_EntityHeli) {
+		   if(Math.abs(torquetow-torqueent) < 10){
+			   return 0;
+		   }
+	   }
+	   if(torqueent >= torquetow) {
+		   return 1;
+	   }
+	   if(torqueent < torquetow) {
+		   return -1;
+	   }
+	   return 0;
+   }
+   
 }
