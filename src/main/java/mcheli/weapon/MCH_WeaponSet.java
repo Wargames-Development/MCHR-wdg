@@ -197,7 +197,7 @@ public class MCH_WeaponSet {
    }
 
    public void onSwitchWeapon(boolean isRemote, boolean isCreative) {
-
+      // Reload continues only while selected (see update()) to prevent instant completes on switch-back.
       int cntSwitch = getCurrentWeapon().getInfo().weaponSwitchCount;
 
       if(this.countWait >= -cntSwitch) {
@@ -226,10 +226,11 @@ public class MCH_WeaponSet {
    }
 
    public void update(Entity shooter, boolean isSelected, boolean isUsed) {
-      if(this.getCurrentWeapon().getInfo() != null) {
-         if(this.countReloadWait > 0) {
+      if (this.getCurrentWeapon().getInfo() != null) {
+         // Pause reload timer if this weapon is not currently selected.
+         if (isSelected && this.countReloadWait > 0) {
             --this.countReloadWait;
-            if(this.countReloadWait == 0) {
+            if (this.countReloadWait == 0) {
                this.reloadMag();
             }
          }
