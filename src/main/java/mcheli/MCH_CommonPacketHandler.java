@@ -21,20 +21,20 @@ import net.minecraft.entity.player.EntityPlayerMP;
 public class MCH_CommonPacketHandler {
 
    public static void onPacketEffectExplosion(EntityPlayer player, ByteArrayDataInput data) {
-      if(player.worldObj.isRemote) {
+      if (player.worldObj.isRemote) {
          MCH_PacketEffectExplosion pkt = new MCH_PacketEffectExplosion();
          pkt.readData(data);
          Object exploder = null;
-         if(player.getDistanceSq(pkt.prm.posX, pkt.prm.posY, pkt.prm.posZ) <= 40000.0D) {
-            if(!pkt.prm.inWater) {
+         if (player.getDistanceSq(pkt.prm.posX, pkt.prm.posY, pkt.prm.posZ) <= 40000.0D) {
+            if (!pkt.prm.inWater) {
                MCH_Config var10000 = MCH_MOD.config;
-               if(!MCH_Config.DefaultExplosionParticle.prmBool) {
-                  MCH_Explosion.effectExplosion(player.worldObj, (Entity)exploder, pkt.prm.posX, pkt.prm.posY, pkt.prm.posZ, pkt.prm.size, pkt.prm.isSmoking);
+               if (!MCH_Config.DefaultExplosionParticle.prmBool) {
+                  MCH_Explosion.effectExplosion(player.worldObj, (Entity) exploder, pkt.prm.posX, pkt.prm.posY, pkt.prm.posZ, pkt.prm.size, pkt.prm.isSmoking);
                } else {
-                  MCH_Explosion.DEF_effectExplosion(player.worldObj, (Entity)exploder, pkt.prm.posX, pkt.prm.posY, pkt.prm.posZ, pkt.prm.size, pkt.prm.isSmoking);
+                  MCH_Explosion.DEF_effectExplosion(player.worldObj, (Entity) exploder, pkt.prm.posX, pkt.prm.posY, pkt.prm.posZ, pkt.prm.size, pkt.prm.isSmoking);
                }
             } else {
-               MCH_Explosion.effectExplosionInWater(player.worldObj, (Entity)exploder, pkt.prm.posX, pkt.prm.posY, pkt.prm.posZ, pkt.prm.size, pkt.prm.isSmoking);
+               MCH_Explosion.effectExplosionInWater(player.worldObj, (Entity) exploder, pkt.prm.posX, pkt.prm.posY, pkt.prm.posZ, pkt.prm.size, pkt.prm.isSmoking);
             }
          }
 
@@ -42,27 +42,27 @@ public class MCH_CommonPacketHandler {
    }
 
    public static void onPacketIndOpenScreen(EntityPlayer player, ByteArrayDataInput data) {
-      if(!player.worldObj.isRemote) {
+      if (!player.worldObj.isRemote) {
          MCH_PacketIndOpenScreen pkt = new MCH_PacketIndOpenScreen();
          pkt.readData(data);
-         if(pkt.guiID == 3) {
+         if (pkt.guiID == 3) {
             MCH_EntityAircraft ac = MCH_EntityAircraft.getAircraft_RiddenOrControl(player);
-            if(ac != null) {
+            if (ac != null) {
                ac.openInventory(player);
             }
          } else {
-            player.openGui(MCH_MOD.instance, pkt.guiID, player.worldObj, (int)player.posX, (int)player.posY, (int)player.posZ);
+            player.openGui(MCH_MOD.instance, pkt.guiID, player.worldObj, (int) player.posX, (int) player.posY, (int) player.posZ);
          }
 
       }
    }
 
    public static void onPacketNotifyServerSettings(EntityPlayer player, ByteArrayDataInput data) {
-      if(player.worldObj.isRemote) {
+      if (player.worldObj.isRemote) {
          MCH_Lib.DbgLog(false, "onPacketNotifyServerSettings:" + player, new Object[0]);
          MCH_PacketNotifyServerSettings pkt = new MCH_PacketNotifyServerSettings();
          pkt.readData(data);
-         if(!pkt.enableCamDistChange) {
+         if (!pkt.enableCamDistChange) {
             W_Reflection.setThirdPersonDistance(4.0F);
          }
 
@@ -78,32 +78,42 @@ public class MCH_CommonPacketHandler {
    public static void onPacketNotifyLock(EntityPlayer player, ByteArrayDataInput data) {
       MCH_PacketNotifyLock pkt = new MCH_PacketNotifyLock();
       pkt.readData(data);
-      if(!player.worldObj.isRemote) {
-         if(pkt.entityID >= 0) {
+
+      if (!player.worldObj.isRemote) {
+         // SERVER: rebroadcast to the pilot + all occupied seats of the targeted aircraft
+         if (pkt.entityID >= 0) {
             Entity target = player.worldObj.getEntityByID(pkt.entityID);
-            if(target != null) {
+            if (target != null) {
                MCH_EntityAircraft ac = null;
-               if(target instanceof MCH_EntityAircraft) {
-                  ac = (MCH_EntityAircraft)target;
-               } else if(target instanceof MCH_EntitySeat) {
-                  ac = ((MCH_EntitySeat)target).getParent();
+               if (target instanceof MCH_EntityAircraft) {
+                  ac = (MCH_EntityAircraft) target;
+               } else if (target instanceof MCH_EntitySeat) {
+                  ac = ((MCH_EntitySeat) target).getParent();
                } else {
                   ac = MCH_EntityAircraft.getAircraft_RiddenOrControl(target);
                }
 
-               if(ac != null && ac.haveFlare() && !ac.isDestroyed()) {
-                  for(int i = 0; i < 2; ++i) {
-                     Entity entity = ac.getEntityBySeatId(i);
-                     if(entity instanceof EntityPlayerMP) {
-                        MCH_PacketNotifyLock.sendToPlayer((EntityPlayerMP)entity);
+               if (ac != null && ac.haveFlare() && !ac.isDestroyed()) {
+                  // Notify pilot + ALL occupied seats. (Seat ids typically 0..getSeatNum())
+                  int seats = ac.getSeatNum();
+                  for (int seatId = 0; seatId <= seats; seatId++) {
+                     Entity seated = ac.getEntityBySeatId(seatId);
+                     if (seated instanceof EntityPlayerMP) {
+                        MCH_PacketNotifyLock s = new MCH_PacketNotifyLock();
+                        s.entityID = ac.getEntityId(); // identify THIS aircraft
+                        mcheli.wrapper.W_Network.sendToPlayer(s, (EntityPlayerMP) seated);
                      }
                   }
                }
             }
          }
       } else {
-         MCH_MOD.proxy.clientLocked();
+         // CLIENT: defer to client proxy (no direct client classes here!)
+         // The proxy will decide whether the local player is actually in the targeted aircraft
+         // and trigger the lock tone only if so.
+         MCH_MOD.proxy.onNotifyLockClient(pkt.entityID);
       }
-
    }
+
+
 }

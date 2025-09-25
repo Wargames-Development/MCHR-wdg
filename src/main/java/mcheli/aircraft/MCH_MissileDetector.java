@@ -1,5 +1,6 @@
 package mcheli.aircraft;
 
+import mcheli.MCH_MOD;
 import mcheli.MCH_PacketNotifyLock;
 import mcheli.weapon.MCH_EntityBaseBullet;
 import mcheli.wrapper.W_Lib;
@@ -26,64 +27,88 @@ public class MCH_MissileDetector {
     }
 
     public void update() {
-        if (this.ac.haveFlare()) {
-            if (this.alertCount > 0) {
-                --this.alertCount;
-            }
+        if (!this.ac.haveFlare()) return;
 
-            boolean isLocked = this.ac.getEntityData().getBoolean("Tracking");
-            if (isLocked) {
-                this.ac.getEntityData().setBoolean("Tracking", false);
-            }
+        if (this.alertCount > 0) {
+            --this.alertCount;
+        }
 
-            if (this.ac.getEntityData().getBoolean("LockOn")) {
-                if (this.alertCount == 0) {
-                    this.alertCount = 10;
-                    if (this.ac != null && this.ac.haveFlare() && !this.ac.isDestroyed()) {
-                        for (int rider = 0; rider < 2; ++rider) {
-                            Entity entity = this.ac.getEntityBySeatId(rider);
-                            if (entity instanceof EntityPlayerMP) {
-                                MCH_PacketNotifyLock.sendToPlayer((EntityPlayerMP) entity);
-                            }
+        // One-tick flags written elsewhere
+        boolean trackingNow = this.ac.getEntityData().getBoolean("Tracking");
+        if (trackingNow) {
+            this.ac.getEntityData().setBoolean("Tracking", false);
+        }
+
+        // If someone explicitly set "LockOn", emit a packet burst (server -> seated players)
+        if (this.ac.getEntityData().getBoolean("LockOn")) {
+            if (this.alertCount == 0) {
+                this.alertCount = 10;
+
+                if (!this.world.isRemote && this.ac != null && this.ac.haveFlare() && !this.ac.isDestroyed()) {
+                    int seats = this.ac.getSeatNum(); // seat ids 0..seats (0 pilot)
+                    for (int seatId = 0; seatId <= seats; ++seatId) {
+                        Entity seated = this.ac.getEntityBySeatId(seatId);
+                        if (seated instanceof EntityPlayerMP) {
+                            MCH_PacketNotifyLock s = new MCH_PacketNotifyLock();
+                            s.entityID = this.ac.getEntityId(); // identify THIS aircraft
+                            mcheli.wrapper.W_Network.sendToPlayer(s, (EntityPlayerMP) seated);
                         }
                     }
                 }
-
-                this.ac.getEntityData().setBoolean("LockOn", false);
             }
+            // consume the flag
+            this.ac.getEntityData().setBoolean("LockOn", false);
+        }
 
-            if (!this.ac.isDestroyed()) {
-                Entity var4 = this.ac.getRiddenByEntity();
-                if (var4 == null) {
-                    var4 = this.ac.getEntityBySeatId(1);
-                }
+        if (this.ac.isDestroyed()) return;
 
-                if (var4 != null) {
-                    if (this.ac.isFlareUsing()) {
+        // Pilot or first seat entity reference (used for client-local checks)
+        Entity ridden = this.ac.getRiddenByEntity();
+        if (ridden == null) {
+            ridden = this.ac.getEntityBySeatId(1);
+        }
 
-                        this.destroyMissile();
-                    } else if (!this.ac.isUAV() && !this.world.isRemote) {
+        if (ridden == null) return;
 
-                        //if (this.hasalert())
+        if (this.ac.isFlareUsing()) {
+            this.destroyMissile();
+            return;
+        }
 
-                            if (this.alertCount == 0 && (isLocked || this.isLockedByMissile()) && this.hasalert()) {
-                                this.alertCount = 20;
-                                W_WorldFunc.MOD_playSoundAtEntity(this.ac, "alert", 50.0F, 1.0F);
-                            }
-                    } else if (this.ac.isUAV() && this.world.isRemote && this.alertCount == 0 && (isLocked || this.isLockedByMissile()) && this.hasalert()) {
-                        this.alertCount = 20;
-                        if (W_Lib.isClientPlayer(var4)) {
-                            W_McClient.MOD_playSoundFX("alert", 50.0F, 1.0F);
+        // Periodic alert (lock maintained) — gate with alertCount to avoid spam
+        boolean locked = trackingNow || this.isLockedByMissile();
+        if (this.alertCount == 0 && locked && this.hasalert()) {
+            this.alertCount = 20;
+
+            if (!this.world.isRemote) {
+                // SERVER: notify pilot + all occupied seats (no global sound)
+                if (!this.ac.isUAV() && this.ac.haveFlare() && !this.ac.isDestroyed()) {
+                    int seats = this.ac.getSeatNum();
+                    for (int seatId = 0; seatId <= seats; ++seatId) {
+                        Entity seated = this.ac.getEntityBySeatId(seatId);
+                        if (seated instanceof EntityPlayerMP) {
+                            MCH_PacketNotifyLock s = new MCH_PacketNotifyLock();
+                            s.entityID = this.ac.getEntityId();
+                            mcheli.wrapper.W_Network.sendToPlayer(s, (EntityPlayerMP) seated);
                         }
                     }
-
                 }
-
-
-
+                // For UAVs, the operator isn’t seated on the server entity; the client proxy will handle local tone.
+            } else {
+                // CLIENT: UAV case — play only for the actual local operator
+                if (this.ac.isUAV() && this.hasalert()) {
+                    // Only trigger for the local client controlling/associated with this UAV.
+                    // Leave the rider check as a guard; proxy method is client-only under the hood.
+                    if (mcheli.wrapper.W_Lib.isClientPlayer(ridden)) {
+                        // Do NOT use global sound helpers here.
+                        // Delegate to proxy so only the local operator hears it.
+                        MCH_MOD.proxy.clientLocked();
+                    }
+                }
             }
         }
     }
+
 
     public void destroyMissile() {
         List list = this.world.getEntitiesWithinAABB(MCH_EntityBaseBullet.class, this.ac.boundingBox.expand(300.0D, 300.0D, 300.0D));
