@@ -1,6 +1,9 @@
 package mcheli.aircraft;
 
+import java.util.Arrays;
 import java.util.List;
+import java.util.stream.Collectors;
+
 import mcheli.MCH_Achievement;
 import mcheli.MCH_Config;
 import mcheli.MCH_MOD;
@@ -23,6 +26,8 @@ import net.minecraft.item.ItemStack;
 import net.minecraft.nbt.NBTTagCompound;
 import net.minecraft.util.*;
 import net.minecraft.world.World;
+import mcheli.weapon.MCH_WeaponSet;
+
 
 public abstract class MCH_ItemAircraft extends W_Item {
 
@@ -61,6 +66,9 @@ public abstract class MCH_ItemAircraft extends W_Item {
       if (info != null) {
          lines.add(EnumChatFormatting.YELLOW + "Category: " + info.category);
          //lines.add(EnumChatFormatting.DARK_PURPLE + "Weapon: " + info.weaponSetList);
+         //         tooltip.add(TextFormatting.DARK_PURPLE + "Weapons: " + Arrays.stream(ac.weapons).map(MCH_WeaponSet::getName).collect(Collectors.joining(", ")));
+         lines.add(EnumChatFormatting.DARK_PURPLE + "Weapons: " + Arrays.stream(ac.weapons).map(MCH_WeaponSet::getName).collect(Collectors.joining(", ")));
+         //im sure this will work
       }
 
       if (ac != null &&
@@ -369,9 +377,13 @@ public abstract class MCH_ItemAircraft extends W_Item {
          spawnAircraft(stack, world, player, x, y, z);
          W_WorldFunc.MOD_playSoundAtEntity(player, "deploy", 1.0F, 1.0F);
          clearDeployTags(tag);
-         if (world.isRemote) {
+         if (!world.isRemote) {
             //System.out.println("[DEBUG] Player successfully placed vehicle.");
+            //tell the client
             player.addChatMessage(new ChatComponentText("Vehicle deployed."));
+         } else {
+            //inform users on the server
+            player.addChatMessage(new ChatComponentText("A player has deployed a vehicle!"));
          }
       }
       // Nothing to reset manually—Minecraft handles usage reset automatically

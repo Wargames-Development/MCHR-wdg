@@ -232,7 +232,7 @@ public class MCH_EntityShip extends MCH_EntityAircraft {
                 this.prevRotationRotor += 360.0F;
             }
 
-            if (isDiving) {
+            if (isDiving) { // the full dive check begins here
 
                 //override aircraft info.gravity in water to be 0 at this point 1 basically just make it 0
 
@@ -248,10 +248,16 @@ public class MCH_EntityShip extends MCH_EntityAircraft {
                     //once in a million obscure bug in it because this mod runs on tooth picks and fingernails
                     if (this.isInWater()) {
                         this.getAcInfo().gravityInWater = 0.0F; // Override gravity in water
+                        //todo this does NOT work, add prints here
+
 
                         if (this.throttleUp) {
+                            System.out.println("gravityinwater" + this.getShipInfo().gravityInWater + "throttle up" + this.throttleUp);
+                            System.out.println("gravityinwater" + this.getShipInfo().gravityInWater + "throttle up" + this.throttleBack);
                             targetDepth = this.posY - 10.0D; // Set target depth for diving
                         } else if (this.throttleBack > 0.01) {
+                            System.out.println("gravityinwater" + this.getShipInfo().gravityInWater + "throttle up" + this.throttleUp);
+                            System.out.println("gravityinwater" + this.getShipInfo().gravityInWater + "throttle back" + this.throttleBack);
                             targetDepth = this.posY + 10.0D; // Set target depth for rising
                         }
 
@@ -262,6 +268,7 @@ public class MCH_EntityShip extends MCH_EntityAircraft {
 
                 } else {
 
+                    System.out.println("stopping vertical motion" + motionY);
                     this.motionY = 0.0D; // NO DUMBASS, Stop vertical motion
 
                     //BAD METHOD NO DO NOT DO THIS:
@@ -269,11 +276,13 @@ public class MCH_EntityShip extends MCH_EntityAircraft {
                     //this.stopDiving();
                 }
             } else {
+                System.out.println("diving stopped");
                 // Maintain the diving level when diving is stopped
                 if (this.posY < divingLevel) {
                     //this is not smooth even remotely
                     //this.motionY = (divingLevel - this.posY) * 0.1D; // Smoothly adjust to the diving level
                     this.motionY = 0.0D; // Stop vertical motion
+                    System.out.println("diving level" + divingLevel);
                     this.posY = divingLevel; // Maintain the diving level
                 }
                 //pretty sure this will always fire like immediately upon placement
@@ -289,35 +298,45 @@ public class MCH_EntityShip extends MCH_EntityAircraft {
                 this.swithVtolMode(true);
             }
 
+            ///***
             if (this.aircraftPitch >= 80 && this.isEntityAlive() && this.isAirBorne) { // Begin dive logic
                 timer++;
+                System.out.println("we are 'airborne', alive, and our pitch is greater than or equal to 80.");
+                //why would we want to increment the timer here
+                //I swear to god using ai for boiler plate has to be the worst shit ever
+                //but it's better than actually writing a single line for this fucking mod.
 
                 // Base acceleration factors
                 double baseAcceleration = 0.01; // Slower acceleration initially
                 double pitchFactor = Math.min(this.aircraftPitch / 90.0, 1.0); // Normalize pitch to range [0, 1]
-
                 // Smooth acceleration: builds up over time
                 double timeFactor = Math.min(timer / 3200.0, 1.0); // Gradually increase until maxed out after 1200 *adjusted to be 3200 ticks
-
                 // Calculate vertical motion with air resistance
                 double airResistance = 0.97; // Resistance to motion for realism
                 this.motionY = (this.motionY * airResistance) + (baseAcceleration * pitchFactor * timeFactor);
-
                 // Apply the same logic for aircraftY if necessary
                 this.aircraftY = this.aircraftY * airResistance;
+                System.out.println("Oh dear god why base accel" + baseAcceleration + "pitch factor" + pitchFactor + "timeFactor" + timeFactor + "air resistance" + airResistance + "motiony" + this.motionY);
+
+                //I hate the magic numbers I hate the magic numbers
 
                 // Handle prolonged dives with a smoother transition
                 if (timer > 3200) {
+                    System.out.println("timer past threshold, probably just dropping like a rock");
                     double prolongedDiveFactor = 1 + ((timer - 3200) / 2400.0); // Gradually increase the effect over time
                     this.motionY += prolongedDiveFactor * baseAcceleration * pitchFactor;
 
                     // Reset the dive if pitch drops below a threshold
                     if (this.aircraftPitch <= 20.0) { //everything is inverse because mcheli hates everything and anything normal
                         timer = 0; // Reset dive mechanics
-
+                        System.out.println("timer set to 0");
                     }
                 }
             }
+            // **/
+            //todo take the old vtol method and put it here, this is a garbled mess
+            // this literally just caused the sub to sink like a brick when diving mode(VTOL was enabled).
+
 
             super.prevPosX = super.posX;
             super.prevPosY = super.posY;
@@ -410,6 +429,7 @@ public class MCH_EntityShip extends MCH_EntityAircraft {
         MCH_Config var10000 = MCH_MOD.config;
         if(!MCH_Config.MouseControlFlightSimMode.prmBool && this.getVtolMode() != 0) {
             rot *= 0.0F;
+            System.out.println("vtol mode isn't 0, ships");
         }
 
         if(super.moveLeft && !super.moveRight) {
