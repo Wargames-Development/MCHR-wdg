@@ -97,5 +97,9 @@ public class MCH_CommonProxy {
 
    public void hitBullet() {}
 
+   /** Server side: no-op. Client proxy overrides to decide whether to play the lock tone. */
+   public void onNotifyLockClient(int entityId) {}
+
+   /** Server side: no-op. Client proxy overrides to set the client lock flag / play tone. */
    public void clientLocked() {}
 }

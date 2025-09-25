@@ -637,7 +637,46 @@ public class MCH_ClientProxy extends MCH_CommonProxy {
       MCH_ClientCommonTickHandler.instance.gui_Common.hitBullet();
    }
 
+   @cpw.mods.fml.relauncher.SideOnly(cpw.mods.fml.relauncher.Side.CLIENT)
+   @Override
+   public void onNotifyLockClient(int entityId) {
+      net.minecraft.client.Minecraft mc = net.minecraft.client.Minecraft.getMinecraft();
+      net.minecraft.entity.player.EntityPlayer local = (mc != null) ? mc.thePlayer : null;
+      if (local == null || entityId < 0) return;
+
+      net.minecraft.entity.Entity target = local.worldObj.getEntityByID(entityId);
+
+      mcheli.aircraft.MCH_EntityAircraft ac = null;
+      if (target instanceof mcheli.aircraft.MCH_EntityAircraft) {
+         ac = (mcheli.aircraft.MCH_EntityAircraft) target;
+      } else if (target instanceof mcheli.aircraft.MCH_EntitySeat) {
+         ac = ((mcheli.aircraft.MCH_EntitySeat) target).getParent();
+      } else {
+         ac = mcheli.aircraft.MCH_EntityAircraft.getAircraft_RiddenOrControl(target);
+      }
+      if (ac == null || ac.isDestroyed()) return;
+
+      // Is the local client riding this aircraft (pilot or any seat)?
+      boolean inAnySeat = ac.getRiddenByEntity() == local;
+      if (!inAnySeat) {
+         int seats = ac.getSeatNum();               // seat ids: 0..seats
+         for (int sid = 1; sid <= seats; sid++) {
+            if (ac.getEntityBySeatId(sid) == local) { inAnySeat = true; break; }
+         }
+      }
+
+      if (inAnySeat) {
+         clientLocked(); // let the client tick/hud play the lock tone for this client only
+      }
+   }
+
+   @cpw.mods.fml.relauncher.SideOnly(cpw.mods.fml.relauncher.Side.CLIENT)
+   @Override
    public void clientLocked() {
-      MCH_ClientCommonTickHandler.isLocked = true;
+      // MC-Heli standard: this flag tells the client tick/HUD to play the lock tone.
+      mcheli.MCH_ClientCommonTickHandler.isLocked = true;
+
+      // If your fork doesn’t use the flag above, you can fallback to a direct local SFX:
+      // mcheli.wrapper.W_McClient.MOD_playSoundFX("alert", 50.0F, 1.0F);
    }
 }
