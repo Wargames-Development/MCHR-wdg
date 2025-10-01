@@ -54,7 +54,7 @@ import mcheli.light.BlockLight;
 import net.minecraft.entity.player.EntityPlayerMP;
 import net.minecraftforge.oredict.OreDictionary;
 
-import static mcheli.hud.MCH_HudItem.player;
+//import static mcheli.hud.MCH_HudItem.player; // Removed hack using client side gui methods on ejection.
 import static mcheli.uav.MCH_EntityUavStation.*;
 //import static net.minecraft.command.CommandBase.getCommandSenderAsPlayer;
 //import static net.minecraft.command.CommandBase.getPlayer;
@@ -4757,60 +4757,97 @@ public abstract class MCH_EntityAircraft extends W_EntityContainer implements MC
 
    public void ejectSeat(Entity entity) {
       int sid = this.getSeatIdByEntity(entity);
-      if(sid >= 0 && sid <= 1) {
-         if(this.getGuiInventory().haveParachute()) {
-            if(sid == 0) {
-               this.getGuiInventory().consumeParachute();
-               this.unmountEntity();
-               this.ejectSeatSub(entity, 0);
-               //idk how or why this decided to neck itself but hopefully this works
+      if (sid < 0 || sid > 1) return;
 
-               if(player.ridingEntity instanceof MCH_EntityHeli) {
-                  //System.out.println("player is riding heli");
-                  this.attackEntityFrom(DamageSource.inWall, this.getMaxHP());
-               }
+      // Must have a chute to start any ejection flow
+      if (!this.getGuiInventory().haveParachute()) return;
 
-               entity = this.getEntityBySeatId(1);
-               if(entity instanceof EntityPlayer) {
-                  entity = null;
+      // All world-changing ops server-side
+      if (!this.worldObj.isRemote) {
+         if (sid == 0) {
+            // Pilot eject
+            this.getGuiInventory().consumeParachute();
+
+            // Defensive unmount to avoid ghost riding state
+            if (entity != null && entity.ridingEntity == this) {
+               entity.mountEntity(null);
+            }
+            // Ensure the aircraft's own pilot slot is cleared
+            this.unmountEntity();
+
+            // Spawn chute and impart motion
+            this.ejectSeatSub(entity, 0);
+
+            // Consider second seat
+            Entity other = this.getEntityBySeatId(1);
+
+            // Original behavior: do NOT auto-eject players; do auto-eject NPCs if you have a second chute
+            if (other != null && !(other instanceof EntityPlayer)) {
+               if (this.getGuiInventory().haveParachute()) {
+                  this.getGuiInventory().consumeParachute();
+
+                  if (other.ridingEntity == this) {
+                     other.mountEntity(null);
+                  }
+                  this.unmountEntityFromSeat(other);
+                  this.ejectSeatSub(other, 1);
                }
             }
 
-            if(this.getGuiInventory().haveParachute() && entity != null) {
-               this.getGuiInventory().consumeParachute();
-               this.unmountEntityFromSeat(entity);
-               this.ejectSeatSub(entity, 1);
+            // (Optional) If you have a seat sync packet, send it here to nearby players.
+            // MCH_PacketSeatList.sendToAllAround(this);
+
+         } else {
+            // Passenger eject (sid == 1)
+            this.getGuiInventory().consumeParachute();
+
+            if (entity != null && entity.ridingEntity == this) {
+               entity.mountEntity(null);
             }
+            this.unmountEntityFromSeat(entity);
+            this.ejectSeatSub(entity, 1);
+
+            // (Optional) Seat sync packet here as well.
+            // MCH_PacketSeatList.sendToAllAround(this);
          }
-
       }
    }
 
    public void ejectSeatSub(Entity entity, int sid) {
-      Vec3 pos = this.getSeatInfo(sid) != null?this.getSeatInfo(sid).pos:null;
-      Vec3 v;
-      if(pos != null) {
-         v = this.getTransformedPosition(pos.xCoord, pos.yCoord + 2.0D, pos.zCoord);
-         entity.setPosition(v.xCoord, v.yCoord, v.zCoord);
+      if (entity == null) return;
+
+      // Place entity above seat position, if available
+      Vec3 seatPos = (this.getSeatInfo(sid) != null) ? this.getSeatInfo(sid).pos : null;
+      if (seatPos != null) {
+         Vec3 worldPos = this.getTransformedPosition(seatPos.xCoord, seatPos.yCoord + 2.0D, seatPos.zCoord);
+         entity.setPosition(worldPos.xCoord, worldPos.yCoord, worldPos.zCoord);
       }
 
-      v = MCH_Lib.RotVec3(0.0D, 2.0D, 0.0D, -this.getRotYaw(), -this.getRotPitch(), -this.getRotRoll());
-      entity.motionX = super.motionX + v.xCoord + ((double)super.rand.nextFloat() - 0.5D) * 0.1D;
-      entity.motionY = super.motionY + v.yCoord;
-      entity.motionZ = super.motionZ + v.zCoord + ((double)super.rand.nextFloat() - 0.5D) * 0.1D;
-      MCH_EntityParachute parachute = new MCH_EntityParachute(super.worldObj, entity.posX, entity.posY, entity.posZ);
-      parachute.rotationYaw = entity.rotationYaw;
-      parachute.motionX = entity.motionX;
-      parachute.motionY = entity.motionY;
-      parachute.motionZ = entity.motionZ;
-      parachute.fallDistance = entity.fallDistance;
-      parachute.user = entity;
-      parachute.setType(2);
-      super.worldObj.spawnEntityInWorld(parachute);
-      if(this.getAcInfo().haveCanopy() && this.isCanopyClose()) {
-         this.openCanopy_EjectSeat();
+      // Give a small upward/forward kick relative to aircraft orientation
+      Vec3 v = MCH_Lib.RotVec3(0.0D, 2.0D, 0.0D, -this.getRotYaw(), -this.getRotPitch(), -this.getRotRoll());
+      entity.motionX = this.motionX + v.xCoord + (((double)this.rand.nextFloat() - 0.5D) * 0.1D);
+      entity.motionY = this.motionY + v.yCoord;
+      entity.motionZ = this.motionZ + v.zCoord + (((double)this.rand.nextFloat() - 0.5D) * 0.1D);
+
+      if (!this.worldObj.isRemote) {
+         // Spawn parachute only on server
+         MCH_EntityParachute parachute = new MCH_EntityParachute(this.worldObj, entity.posX, entity.posY, entity.posZ);
+         parachute.rotationYaw = entity.rotationYaw;
+         parachute.motionX = entity.motionX;
+         parachute.motionY = entity.motionY;
+         parachute.motionZ = entity.motionZ;
+         parachute.fallDistance = entity.fallDistance;
+         parachute.user = entity;
+         parachute.setType(2);
+         this.worldObj.spawnEntityInWorld(parachute);
+
+         // Open canopy if present
+         if (this.getAcInfo().haveCanopy() && this.isCanopyClose()) {
+            this.openCanopy_EjectSeat();
+         }
       }
 
+      // Sound can be called on both sides via wrapper; keep as original
       W_WorldFunc.MOD_playSoundAtEntity(entity, "eject_seat", 5.0F, 1.0F);
    }
 
