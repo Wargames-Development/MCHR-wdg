@@ -12,11 +12,13 @@ import cpw.mods.fml.common.event.FMLPostInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
 import cpw.mods.fml.common.event.FMLServerStartedEvent;
 import cpw.mods.fml.common.event.FMLServerStartingEvent;
+import cpw.mods.fml.common.network.NetworkCheckHandler;
 import cpw.mods.fml.common.registry.EntityRegistry;
 import cpw.mods.fml.common.registry.GameRegistry;
 import java.io.File;
 import java.util.Iterator;
 
+import cpw.mods.fml.relauncher.Side;
 import mcheli.aircraft.MCH_EntityHide;
 import mcheli.aircraft.MCH_EntityHitBox;
 import mcheli.aircraft.MCH_EntitySeat;
@@ -91,7 +93,7 @@ import java.util.List;
 
 @Mod(
    modid = "mcheli",
-   name = "Mcheli Overdrive Reforged Plus",
+   name = "MCHELI-O/R Wargames Edition",
    dependencies = "required-after:Forge@[10.13.2.1230,)"
 )
 @NetworkMod(
@@ -103,7 +105,7 @@ public class MCH_MOD {
    public static final String MOD_ID = "mcheli";
    public static final String DOMAIN = "mcheli";
    public static final String MCVER = "1.7.10";
-   public static String VER = "1.8";
+   public static String VER = "0.9.9_X42";
    public static final String MOD_CH = "MCHeli_CH";
    @Instance("mcheli")
    public static MCH_MOD instance;
@@ -150,6 +152,21 @@ public class MCH_MOD {
    public static PacketHandler getPacketHandler() {
       return newPacketHandler;
    }
+
+   /** Enforce exact client<->server version match for this mod. */
+   @NetworkCheckHandler
+   public boolean checkModVersions(java.util.Map<String, String> remoteVersions, Side remoteSide) {
+      // What the other side reports for our mod id
+      String remote = remoteVersions.get(MOD_ID); // MOD_ID = "mcheli"
+      if (remote == null) return false;           // other side doesn't have the mod -> reject
+
+      // Local version of this mod from the active ModContainer (reads mcmod.info)
+      String local = cpw.mods.fml.common.Loader.instance().activeModContainer().getVersion();
+
+      // Require exact string match (e.g., "0.9.9_X42")
+      return local != null && local.equals(remote);
+   }
+
 
    @EventHandler
    public void PreInit(FMLPreInitializationEvent evt) {
