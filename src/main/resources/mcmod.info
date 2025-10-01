@@ -2,12 +2,12 @@
   {
     "modid": "mcheli",
     "name": "MCHELI-O/R Wargames Edition",
-    "description": "A fork of MCHELI Overdrive/Reforged,\nFixes multiple small issues,\nAnd adds features for the Wargames Server,\n\nCredits: EMB4 (original MCHELI), MOC (MCHELI decoded), RagexPrince683 (MCHELI-O), Glac (Protection Edits), BarrackOsama (Balancing), Wargames Development Group (support), Fureniu aka Fureniku, Zealot, Rainwind, Grzybek, RitPennachio, Grig, woyl aka krftv, Hamzah, Edwardg2, Moc, Heinrich112, TehNIck, TheBobcat and many others. If we missed someone please let us know.",
-    "version": "0.9.0_X20",
+    "description": "A fork of MCHELI Overdrive/Reforged,\nFixes multiple small issues,\nAnd adds features/fixes for the Wargames Server,\n\nCredits: EMB4 (original MCHELI), MOC (MCHELI decoded), RagexPrince683 (MCHELI-O), SecretAgent12 (MCHELI-O Features), MrNorwood (Packet Work & Optimisation), ATOM_14A (Some Model work), Glac (Wargames Edits), BarrackOsama (Balancing), Jomples (Wargames Edits), Wargames Development Group (support), Fureniu aka Fureniku, Zealot, Rainwind, Grzybek, RitPennachio, Grig, woyl aka krftv, Hamzah, Edwardg2, Moc, Heinrich112, TehNIck, TheBobcat and many others. If we missed someone please let us know.",
+    "version": "0.9.9_X42",
     "mcversion": "1.7.10",
     "url": "https://discord.wargames.uk",
     "dependencies": ["hbm"],
-    "authorList": ["EMB4",RagexPrince683","TV90","DTC10E","Glac","Barrack"],
+    "authorList": ["EMB4","RagexPrince683","TV90","DTC10E","Heinrich112","ATOM_14A","MrNorwood","SecretAgent12","Glac","Barrack","Jomples"],
     "credits": "Created with help by many, see description.",
     "logoFile": "mcheli-wargames_logo.png"
   }
