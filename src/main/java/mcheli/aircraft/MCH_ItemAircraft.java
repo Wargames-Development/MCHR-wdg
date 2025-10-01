@@ -33,8 +33,28 @@ public abstract class MCH_ItemAircraft extends W_Item {
 
    private static boolean isRegistedDispenseBehavior = false;
 
-   public static int timeHeld = 0;
+   // Placement state tags & timing
+   private static final String TAG_START_TICK   = "StartTick";    // long: world time when we pinned the target
+   private static final String TAG_READY_UNTIL  = "ReadyUntil";   // long: server grace window end
+   private static final String TAG_CANCEL_UNTIL = "CancelUntil";  // long: brief server cooldown after cancel
+   private static final String TAG_READY_SHOWN  = "ReadyShown";   // boolean: client showed “Release…” once
+   private static final String TAG_LAST_REPIN_MSG = "LastRepinMsg"; // long world time
 
+   private static final int READY_GRACE_TICKS     = 20;  // ~1s
+   private static final int CANCEL_COOLDOWN_TICKS = 10;  // ~0.5s
+
+
+   // --- client-only transient state (do NOT persist to NBT) ---
+   private static final java.util.Set<Integer> CLIENT_READY_HINT_SHOWN = new java.util.HashSet<Integer>();
+   private static final java.util.Map<Integer, Long> CLIENT_COOLDOWN_UNTIL = new java.util.HashMap<Integer, Long>();
+   private static final java.util.Map<Integer, Long> CLIENT_LAST_START_TICK = new java.util.HashMap<Integer, Long>();
+
+
+
+   private static int normalizeSnowY(World w, int x, int y, int z) {
+      Block b = w.getBlock(x, y, z);
+      return (b == Blocks.snow_layer) ? (y - 1) : y;
+   }
 
    public MCH_ItemAircraft(int i) {
       super(i);
@@ -111,81 +131,94 @@ public abstract class MCH_ItemAircraft extends W_Item {
       return info != null?super.toString() + "(" + info.getDirectoryName() + ":" + info.name + ")":super.toString() + "(null)";
    }
 
-   public ItemStack onItemRightClick(ItemStack par1ItemStack, World world, EntityPlayer player) {
+   @Override
+   public ItemStack onItemRightClick(ItemStack stack, World world, EntityPlayer player) {
       float f = 1.0F;
       float f1 = player.prevRotationPitch + (player.rotationPitch - player.prevRotationPitch) * f;
-      float f2 = player.prevRotationYaw + (player.rotationYaw - player.prevRotationYaw) * f;
+      float f2 = player.prevRotationYaw   + (player.rotationYaw   - player.prevRotationYaw)   * f;
       double d0 = player.prevPosX + (player.posX - player.prevPosX) * f;
       double d1 = player.prevPosY + (player.posY - player.prevPosY) * f + 1.62D - player.yOffset;
       double d2 = player.prevPosZ + (player.posZ - player.prevPosZ) * f;
-      Vec3 vec3 = W_WorldFunc.getWorldVec3(world, d0, d1, d2);
-      float f3 = MathHelper.cos(-f2 * 0.017453292F - (float)Math.PI);
-      float f4 = MathHelper.sin(-f2 * 0.017453292F - (float)Math.PI);
-      float f5 = -MathHelper.cos(-f1 * 0.017453292F);
-      float f6 = MathHelper.sin(-f1 * 0.017453292F);
-      float f7 = f4 * f5;
-      float f8 = f3 * f5;
-      double d3 = 5.0D;
-      Vec3 vec31 = vec3.addVector(f7 * d3, f6 * d3, f8 * d3);
-      MovingObjectPosition mop = W_WorldFunc.clip(world, vec3, vec31, true);
+      Vec3 eye = W_WorldFunc.getWorldVec3(world, d0, d1, d2);
 
-      if (mop == null) return par1ItemStack;
+      float c = MathHelper.cos(-f2 * 0.017453292F - (float)Math.PI);
+      float s = MathHelper.sin(-f2 * 0.017453292F - (float)Math.PI);
+      float cp = -MathHelper.cos(-f1 * 0.017453292F);
+      float sp =  MathHelper.sin(-f1 * 0.017453292F);
+      double dist = 5.0D;
 
-      Vec3 look = player.getLook(f);
+      Vec3 look  = Vec3.createVectorHelper(s * cp, sp, c * cp);
+      Vec3 reach = eye.addVector(look.xCoord * dist, look.yCoord * dist, look.zCoord * dist);
+
+      MovingObjectPosition mop = W_WorldFunc.clip(world, eye, reach, true);
+      if (mop == null) return stack;
+
+      // Don't start if an entity is blocking immediately in front
       boolean blockingEntity = false;
-      float expand = 1.0F;
-      List entities = world.getEntitiesWithinAABBExcludingEntity(player, player.boundingBox.addCoord(look.xCoord * d3, look.yCoord * d3, look.zCoord * d3).expand(expand, expand, expand));
-
-      for (Object o : entities) {
-         Entity ent = (Entity)o;
-         if (ent.canBeCollidedWith()) {
-            float border = ent.getCollisionBorderSize();
-            if (ent.boundingBox.expand(border, border, border).isVecInside(vec3)) {
-               blockingEntity = true;
-               break;
-            }
+      List list = world.getEntitiesWithinAABBExcludingEntity(
+              player,
+              player.boundingBox.addCoord(look.xCoord * dist, look.yCoord * dist, look.zCoord * dist).expand(1.0, 1.0, 1.0)
+      );
+      for (Object o : list) {
+         Entity e = (Entity)o;
+         if (e.canBeCollidedWith()) {
+            float border = e.getCollisionBorderSize();
+            if (e.boundingBox.expand(border, border, border).isVecInside(eye)) { blockingEntity = true; break; }
          }
       }
-
-      if (blockingEntity) return par1ItemStack;
+      if (blockingEntity) return stack;
 
       if (W_MovingObjectPosition.isHitTypeTile(mop)) {
          if (MCH_MOD.config.PlaceableOnSpongeOnly.prmBool) {
-            Block block = world.getBlock(mop.blockX, mop.blockY, mop.blockZ);
-            if (!(block instanceof BlockSponge)) return par1ItemStack;
+            Block b = world.getBlock(mop.blockX, mop.blockY, mop.blockZ);
+            if (!(b instanceof BlockSponge)) return stack;
+         }
+         if (world.getWorldTime() < 100) return stack;
+
+         if (stack.stackTagCompound == null) stack.stackTagCompound = new NBTTagCompound();
+         NBTTagCompound tag = stack.stackTagCompound;
+
+         if (!tag.hasKey("TargetX")) {
+            // First press this attempt: pin target & start server stopwatch
+            int tx = mop.blockX;
+            int ty = normalizeSnowY(world, mop.blockX, mop.blockY, mop.blockZ);
+            int tz = mop.blockZ;
+
+            tag.setInteger("TargetX", tx);
+            tag.setInteger("TargetY", ty);
+            tag.setInteger("TargetZ", tz);
+
+            tag.setLong(TAG_START_TICK, world.getTotalWorldTime());
+            tag.removeTag(TAG_READY_UNTIL);
+            tag.removeTag(TAG_CANCEL_UNTIL);
+
+            // reset client-only hint/cooldown state (prevents duplicates)
+            if (world.isRemote) {
+               int pid = player.getEntityId();
+               CLIENT_READY_HINT_SHOWN.remove(pid);
+               CLIENT_COOLDOWN_UNTIL.remove(pid);
+            }
+
+            if (world.isRemote) {
+               player.addChatMessage(new ChatComponentText("Hold right-click to deploy…"));
+            } else {
+               System.out.println(" [DEBUG] " + player.getCommandSenderName()
+                       + " is trying to place " + this.getUnlocalizedName().replace("item.", "")
+                       + " at " + tx + "," + ty + "," + tz + ".");
+            }
          }
 
-         if (world.getWorldTime() < 100) return par1ItemStack;
-
-         if (par1ItemStack.stackTagCompound == null)
-            par1ItemStack.stackTagCompound = new NBTTagCompound();
-
-         NBTTagCompound tag = par1ItemStack.stackTagCompound;
-
-
-
-         if (!tag.hasKey("DeployStart")) {
-            tag.setLong("DeployStart", par1ItemStack.getMaxItemUseDuration());
-            //this.getMaxItemUseDuration(stack) - count
-            //idk idk this is beyond my mental capacity to even fucking look at rn IDK IDK IDK
-            tag.setInteger("TargetX", mop.blockX);
-            tag.setInteger("TargetY", mop.blockY);
-            tag.setInteger("TargetZ", mop.blockZ);
-            player.setItemInUse(par1ItemStack, this.getMaxItemUseDuration(par1ItemStack));
-
-            if (world.isRemote)
-               player.addChatMessage(new ChatComponentText("Hold click to deploy vehicle..."));
-         }
-
+         // Ensure we’re in “using” state; calling again while using is harmless
          if (!player.isUsingItem()) {
-            player.setItemInUse(par1ItemStack, this.getMaxItemUseDuration(par1ItemStack));
+            player.setItemInUse(stack, this.getMaxItemUseDuration(stack));
          }
-
-         //todo reset deploystart on single click but not on hold?
       }
-
-      return par1ItemStack;
+      return stack;
    }
+
+
+
+
 
    @Override
    public int getMaxItemUseDuration(ItemStack stack) {
@@ -199,138 +232,167 @@ public abstract class MCH_ItemAircraft extends W_Item {
 
    @Override
    public void onUsingTick(ItemStack stack, EntityPlayer player, int count) {
-
-      //if (player.worldObj.isRemote) return;
-      //int dothing = 0;
-
-
-      int used = this.getMaxItemUseDuration(stack) - count;
-
-      if (player.worldObj.isRemote && used == MCH_Config.placetimer.prmInt) {
-         player.addChatMessage(new ChatComponentText("Vehicle ready for deployment!"));
-      }
-
-      //if (timeHeld == MCH_Config.placetimer.prmInt && player.worldObj.isRemote) {
-      //   //do ONCE
-      //   //do ON THE CLIENT
-      //   //dothing += 1;
-      //   //if (dothing == 1) { //idc if its not optimized it fucking works goddammit
-      //      player.addChatMessage(new ChatComponentText("Vehicle ready for deployment!"));
-      //      //wait I can just check that it equals instead of is greater than, nevermind jfc
-      //  // }
-      //}
-
+      if (stack.stackTagCompound == null) return;
       NBTTagCompound tag = stack.getTagCompound();
-      //non spaghetti code logic above just need to figure out where and how to implement it
 
-      if (stack.stackTagCompound == null || player.worldObj.isRemote) {
-         System.out.println("[DEBUG] Stack has no tag or is remote world.");
-         return;
-      }
+      // ---------------- CLIENT ----------------
+      if (player.worldObj.isRemote) {
+         long now = player.worldObj.getTotalWorldTime();
+         int pid = player.getEntityId();
 
-      //this is hell
+         // (MINIMAL CHANGE) Do NOT obey server TAG_CANCEL_UNTIL on the client,
+         // it could hide the "ready" hint at the exact threshold tick.
+         // if (tag.hasKey(TAG_CANCEL_UNTIL) && now < tag.getLong(TAG_CANCEL_UNTIL)) return;
 
-      //NBTTagCompound tag = stack.stackTagCompound;
+         // keep our own tiny client-side hush after a target mismatch
+         if (CLIENT_COOLDOWN_UNTIL.containsKey(pid) && now < CLIENT_COOLDOWN_UNTIL.get(pid)) return;
 
-      // Validate both deploy state and click-hold continuously
-      //boolean holdingClick = player.getItemInUse() == stack;
+         // reset the one-shot "ready" hint whenever the server restarts the attempt
+         if (tag.hasKey(TAG_START_TICK)) {
+            long startSeen = tag.getLong(TAG_START_TICK);
+            Long prev = CLIENT_LAST_START_TICK.get(pid);
+            if (prev == null || prev.longValue() != startSeen) {
+               CLIENT_LAST_START_TICK.put(pid, startSeen);
+               CLIENT_READY_HINT_SHOWN.remove(pid);
+            }
+         } else {
+            CLIENT_LAST_START_TICK.remove(pid);
+            CLIENT_READY_HINT_SHOWN.remove(pid);
+         }
 
-      //boolean hasDeployStart = tag.hasKey("DeployStart");
-      //causing server error
-
-
-
-      //if (!holdingClick) {
-         //if (hasDeployStart) {
-         //   System.out.println("[DEBUG] Player released right-click, cancelling.");
-         //   cancelDeployment(tag, player, "Vehicle deployment cancelled (input released).");
-         //}
-         //return;
-     // }
-
-      //if (!hasDeployStart) {
-      //   System.out.println("[DEBUG] No DeployStart tag.");
-      //   return;
-      //}
-
-      // Valid raytrace check
-      MovingObjectPosition mop = getBlockIncludingWater(player, 5.0D);
-      if (mop == null) {
-         System.out.println("[DEBUG] No block targeted, cancelling.");
-         cancelDeployment(tag, player, "Vehicle deployment cancelled (target lost).");
-         return;
-      }
-
-      Block block = player.worldObj.getBlock(mop.blockX, mop.blockY, mop.blockZ);
-      if (!block.getMaterial().isSolid() && block.getMaterial() != Material.water) {
-         //apparently || is not the right operator here, it is AND //WTF???
-         System.out.println("[DEBUG] Target is not solid or water, cancelling.");
-         cancelDeployment(tag, player, "Vehicle deployment cancelled (invalid surface).");
-         return;
-      }
-
-      int currentX = mop.blockX;
-      int currentY = mop.blockY;
-      int currentZ = mop.blockZ;
-      System.out.println("[DEBUG] Raytrace hit block at: " + currentX + "," + currentY + "," + currentZ);
-
-      if (!tag.hasKey("TargetX") || !tag.hasKey("TargetY") || !tag.hasKey("TargetZ")) {
-         System.out.println("[DEBUG] No saved target, setting initial target.");
-         tag.setInteger("TargetX", currentX);
-         tag.setInteger("TargetY", currentY);
-         tag.setInteger("TargetZ", currentZ);
-      } else {
-         int targetX = tag.getInteger("TargetX");
-         int targetY = tag.getInteger("TargetY");
-         int targetZ = tag.getInteger("TargetZ");
-
-         System.out.println("[DEBUG] Saved target: " + targetX + "," + targetY + "," + targetZ);
-
-         //Material mat = block.getMaterial();
-         boolean coordsChanged = currentX != targetX || currentY != targetY || currentZ != targetZ;
-         boolean isLiquid = block.getMaterial().isLiquid();
-
-         if (coordsChanged && !isLiquid) {
-            System.out.println("[DEBUG] Coordinates changed (and not liquid), cancelling.");
-            cancelDeployment(tag, player, "Vehicle deployment cancelled (target changed).");
+         // need a pinned target + start
+         if (!tag.hasKey("TargetX") || !tag.hasKey("TargetY") || !tag.hasKey("TargetZ") || !tag.hasKey(TAG_START_TICK)) {
             return;
          }
+
+         // suppress hint if not still looking at pinned block
+         MovingObjectPosition mop = getBlockIncludingWater(player, 5.0D);
+         if (mop == null) {
+            CLIENT_COOLDOWN_UNTIL.put(pid, now + CANCEL_COOLDOWN_TICKS);
+            CLIENT_READY_HINT_SHOWN.remove(pid);
+            return;
+         }
+         int tx = tag.getInteger("TargetX");
+         int ty = tag.getInteger("TargetY");
+         int tz = tag.getInteger("TargetZ");
+         int curX = mop.blockX;
+         int curY = normalizeSnowY(player.worldObj, mop.blockX, mop.blockY, mop.blockZ);
+         int curZ = mop.blockZ;
+
+         if (curX != tx || curY != ty || curZ != tz) {
+            // just hush the UI until server re-pins; no chat spam here
+            CLIENT_COOLDOWN_UNTIL.put(pid, now + CANCEL_COOLDOWN_TICKS);
+            CLIENT_READY_HINT_SHOWN.remove(pid);
+            return;
+         }
+
+         // one-shot "Release..." exactly once per attempt
+         long start = tag.getLong(TAG_START_TICK);
+         long elapsed = now - start;
+         if (elapsed >= MCH_Config.placetimer.prmInt && !CLIENT_READY_HINT_SHOWN.contains(pid)) {
+            player.addChatMessage(new ChatComponentText("Release right-click to deploy."));
+            CLIENT_READY_HINT_SHOWN.add(pid);
+         }
+         return;
       }
 
-      //long deployStart = tag.getLong("DeployStart");
-      //never used above
-      //if (holdingClick) {
-      //   timeHeld = this.getMaxItemUseDuration(stack) - count;
-      //} else {
-      //   timeHeld = 0;
-      //}
-      //the problem here is timeHeld is being incremented despite the player not holding the click for some fucking reason
-      System.out.println("[DEBUG] Time held: " + timeHeld + " ticks. Required: " + MCH_Config.placetimer.prmInt);
+      // ---------------- SERVER ----------------
+      long now = player.worldObj.getTotalWorldTime();
 
-      //check that we are still holding here
-      //if (!holdingClick) {
-      //   if (hasDeployStart) {
-      //      System.out.println("[DEBUG] Player released right-click, cancelling.");
-      //      cancelDeployment(tag, player, "Vehicle deployment cancelled (input released).");
-      //   }
-      //   return;
-      //}
+      // respect server cancel cooldown (don’t re-arm mid-cooldown)
+      if (tag.hasKey(TAG_CANCEL_UNTIL) && now < tag.getLong(TAG_CANCEL_UNTIL)) return;
+
+      // must have pinned target to validate
+      if (!tag.hasKey("TargetX") || !tag.hasKey("TargetY") || !tag.hasKey("TargetZ")) {
+         // no pinned target; nothing to do while holding
+         return;
+      }
+
+      int tx = tag.getInteger("TargetX");
+      int ty = tag.getInteger("TargetY");
+      int tz = tag.getInteger("TargetZ");
+
+      // current aim
+      MovingObjectPosition mop = getBlockIncludingWater(player, 5.0D);
+      if (mop == null) {
+         // quiet cooldown; client UI will hush
+         tag.setLong(TAG_CANCEL_UNTIL, now + CANCEL_COOLDOWN_TICKS);
+         return;
+      }
+      int curX = mop.blockX;
+      int curY = normalizeSnowY(player.worldObj, mop.blockX, mop.blockY, mop.blockZ);
+      int curZ = mop.blockZ;
+
+      // if target changed WHILE STILL HOLDING: seamlessly re-pin + restart timer
+      if (curX != tx || curY != ty || curZ != tz) {
+         tag.setInteger("TargetX", curX);
+         tag.setInteger("TargetY", curY);
+         tag.setInteger("TargetZ", curZ);
+         tag.setLong(TAG_START_TICK, now);       // restart stopwatch
+         tag.removeTag(TAG_READY_UNTIL);         // clear any grace from the old target
+         tag.setLong(TAG_CANCEL_UNTIL, now + 2); // tiny hush to prevent flicker
+
+         // OPTIONAL: gently inform the player (throttled to 1/sec)
+         long last = tag.hasKey(TAG_LAST_REPIN_MSG) ? tag.getLong(TAG_LAST_REPIN_MSG) : 0L;
+         if (now - last >= 20) {
+            player.addChatMessage(new ChatComponentText("Target changed — restarting deployment…"));
+            tag.setLong(TAG_LAST_REPIN_MSG, now);
+         }
+         return;
+      }
+
+      // surface must remain valid
+      Block block = player.worldObj.getBlock(tx, ty, tz);
+      if (!block.getMaterial().isSolid() && block.getMaterial() != Material.water) {
+         tag.setLong(TAG_CANCEL_UNTIL, now + CANCEL_COOLDOWN_TICKS);
+         return;
+      }
+
+      // start stopwatch if missing (edge cases)
+      if (!tag.hasKey(TAG_START_TICK)) {
+         tag.setLong(TAG_START_TICK, now);
+      }
+
+      long start = tag.getLong(TAG_START_TICK);
+      long elapsed = now - start;
+
+      // first time we reach timer, open a small grace window
+      if (elapsed >= MCH_Config.placetimer.prmInt && !tag.hasKey(TAG_READY_UNTIL)) {
+         tag.setLong(TAG_READY_UNTIL, now + READY_GRACE_TICKS);
+      }
    }
+
+
+
+
+
 
    private void cancelDeployment(NBTTagCompound tag, EntityPlayer player, String message) {
-      System.out.println("[DEBUG] CancelDeployment called: " + message);
-      clearDeployTags(tag);
+      // Set cooldown; do not stop using, do not clear tags here
+      long now = player.worldObj.getTotalWorldTime();
+      tag.setLong(TAG_CANCEL_UNTIL, now + CANCEL_COOLDOWN_TICKS);
+      tag.setBoolean(TAG_READY_SHOWN, false); // allow the hint again next attempt
+
+      // Player-only feedback
       player.addChatMessage(new ChatComponentText(message));
-      player.stopUsingItem();
    }
+
 
    private void clearDeployTags(NBTTagCompound tag) {
       tag.removeTag("DeployStart");
       tag.removeTag("TargetX");
       tag.removeTag("TargetY");
       tag.removeTag("TargetZ");
-      System.out.println("[DEBUG] Cleared deployment tags.");
+      tag.removeTag(TAG_START_TICK);
+      tag.removeTag(TAG_READY_UNTIL);
+      tag.removeTag(TAG_CANCEL_UNTIL);
+      tag.removeTag("DeployMsgShown");
+      tag.removeTag(TAG_READY_SHOWN);
+      tag.removeTag(TAG_LAST_REPIN_MSG);
+      // client-only maps are cleared on release in onPlayerStoppedUsing
    }
+
+
 
    public MovingObjectPosition getBlockIncludingWater(EntityPlayer player, double range) {
 
@@ -367,27 +429,65 @@ public abstract class MCH_ItemAircraft extends W_Item {
 
    @Override
    public void onPlayerStoppedUsing(ItemStack stack, World world, EntityPlayer player, int timeLeft) {
-      int used = this.getMaxItemUseDuration(stack) - timeLeft;
-      if (used >= MCH_Config.placetimer.prmInt) {
-         // Successful placement
-         NBTTagCompound tag = stack.getTagCompound();
-         int x = tag.getInteger("TargetX");
-         int y = tag.getInteger("TargetY");
-         int z = tag.getInteger("TargetZ");
-         spawnAircraft(stack, world, player, x, y, z);
-         W_WorldFunc.MOD_playSoundAtEntity(player, "deploy", 1.0F, 1.0F);
-         clearDeployTags(tag);
-         if (!world.isRemote) {
-            //System.out.println("[DEBUG] Player successfully placed vehicle.");
-            //tell the client
-            player.addChatMessage(new ChatComponentText("Vehicle deployed."));
-         } else {
-            //inform users on the server
-            player.addChatMessage(new ChatComponentText("A player has deployed a vehicle!"));
+      if (stack.stackTagCompound == null) return;
+      NBTTagCompound tag = stack.getTagCompound();
+
+      if (!world.isRemote) {
+         long now = world.getTotalWorldTime();
+
+         // if cancel cooldown active, this is a cancel
+         if (tag.hasKey(TAG_CANCEL_UNTIL) && now < tag.getLong(TAG_CANCEL_UNTIL)) {
+            clearDeployTags(tag);
+            player.addChatMessage(new ChatComponentText("Vehicle deployment cancelled."));
+            return;
          }
+
+         // must have a target + start time
+         if (!tag.hasKey("TargetX") || !tag.hasKey("TargetY") || !tag.hasKey("TargetZ") || !tag.hasKey(TAG_START_TICK)) {
+            clearDeployTags(tag);
+            player.addChatMessage(new ChatComponentText("Vehicle deployment cancelled."));
+            return;
+         }
+
+         int tx = tag.getInteger("TargetX");
+         int ty = tag.getInteger("TargetY");
+         int tz = tag.getInteger("TargetZ");
+         long start = tag.getLong(TAG_START_TICK);
+         long elapsed = now - start;
+
+         boolean timerOK = elapsed >= MCH_Config.placetimer.prmInt;
+         boolean graceOK = tag.hasKey(TAG_READY_UNTIL) && now <= tag.getLong(TAG_READY_UNTIL);
+
+         if (timerOK || graceOK) {
+            ty = normalizeSnowY(world, tx, ty, tz);
+            Block b = world.getBlock(tx, ty, tz);
+            if (b.getMaterial().isSolid() || b.getMaterial() == Material.water) {
+               spawnAircraft(stack, world, player, tx, ty, tz);
+               W_WorldFunc.MOD_playSoundAtEntity(player, "deploy", 1.0F, 1.0F);
+               clearDeployTags(tag);
+               player.addChatMessage(new ChatComponentText("Vehicle deployed."));
+               System.out.println(" [DEBUG] " + player.getCommandSenderName()
+                       + " has placed " + this.getUnlocalizedName().replace("item.", "")
+                       + " at " + tx + "," + ty + "," + tz + ".");
+               return;
+            }
+         }
+
+         // Not placed → clean up
+         clearDeployTags(tag);
+         player.addChatMessage(new ChatComponentText("Vehicle deployment cancelled."));
+      } else {
+         // tidy client-only transient flags on release
+         int pid = player.getEntityId();
+         CLIENT_READY_HINT_SHOWN.remove(pid);
+         CLIENT_COOLDOWN_UNTIL.remove(pid);
       }
-      // Nothing to reset manually—Minecraft handles usage reset automatically
    }
+
+
+
+
+
 
    //@Override
    //public boolean canContinueUsing(ItemStack stack, World world, EntityLivingBase entity, int count) {
