@@ -3,7 +3,7 @@
     "modid": "mcheli",
     "name": "MCHELI-O/R Wargames Edition",
     "description": "A fork of MCHELI Overdrive/Reforged,\nFixes multiple small issues,\nAnd adds features/fixes for the Wargames Server,\n\nCredits: EMB4 (original MCHELI), MOC (MCHELI decoded), RagexPrince683 (MCHELI-O), SecretAgent12 (MCHELI-O Features), MrNorwood (Packet Work & Optimisation), ATOM_14A (Some Model work), Glac (Wargames Edits), BarrackOsama (Balancing), Jomples (Wargames Edits), Wargames Development Group (support), Fureniu aka Fureniku, Zealot, Rainwind, Grzybek, RitPennachio, Grig, woyl aka krftv, Hamzah, Edwardg2, Moc, Heinrich112, TehNIck, TheBobcat and many others. If we missed someone please let us know.",
-    "version": "0.9.10_X46",
+    "version": "0.9.11_X55",
     "mcversion": "1.7.10",
     "url": "https://discord.wargames.uk",
     "dependencies": ["hbm"],
