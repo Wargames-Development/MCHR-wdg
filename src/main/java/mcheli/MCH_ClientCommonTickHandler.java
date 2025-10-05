@@ -214,7 +214,7 @@ public class MCH_ClientCommonTickHandler extends W_TickHandler {
          if(isLocked && lockedSoundCount == 0) {
             isLocked = false;
             lockedSoundCount = 20;
-            MCH_ClientTickHandlerBase.playSound("locked");
+            MCH_ClientTickHandlerBase.playSound("locked", 40.0F, 1.0F);
          }
       } else {
          lockedSoundCount = 0;
